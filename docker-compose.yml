@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: fx-settlement-postgres
+    environment:
+      POSTGRES_DB: fx_settlement
+      POSTGRES_USER: shopping
+      POSTGRES_PASSWORD: shopping
+    ports:
+      - "5432:5432"
+    volumes:
+      - fx-settlement-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shopping -d fx_settlement"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  fx-settlement-postgres-data:
