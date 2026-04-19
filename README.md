@@ -88,6 +88,37 @@ go run ./cmd/grpc
 go run ./cmd/rpc
 ```
 
+## Make Targets
+```bash
+make infra-up
+make migrate-up
+make run-api
+make run-grpc
+make run-rpc
+```
+
+관측성 데모를 한 번에 확인하려면 아래 한 줄이면 됩니다.
+
+```bash
+make observability-demo
+```
+
+이 타깃은 다음 순서로 실행됩니다.
+- `.env`가 없으면 `.env.example`을 복사
+- postgres, prometheus, grafana 기동
+- migration 적용
+- HTTP, gRPC, net/rpc 서버를 백그라운드로 실행
+- 세 transport에 샘플 성공/실패 요청을 전송
+- 각 metrics endpoint에서 `fx_inbound_requests_total`을 출력
+
+샘플 트래픽만 따로 보내고 싶으면 아래 타깃을 사용하면 됩니다.
+
+```bash
+make observability-traffic
+make metrics-snapshot
+make prometheus-query
+```
+
 Grafana는 `http://localhost:3000`에서 `admin/admin`으로 바로 들어갈 수 있고, Prometheus datasource와 대시보드를 자동으로 provisioning 합니다.
 Prometheus는 `http://localhost:9090`에서 각 프로세스의 metrics endpoint를 scrape 합니다.
 
