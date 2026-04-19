@@ -15,6 +15,7 @@ const defaultEnvFilePath = ".env"
 type Config struct {
 	HTTPPort              string        `env:"HTTP_PORT" env-default:"8000" env-description:"HTTP listen port"`
 	GRPCPort              string        `env:"GRPC_PORT" env-default:"9000" env-description:"gRPC listen port"`
+	RPCPort               string        `env:"RPC_PORT" env-default:"9100" env-description:"RPC listen port"`
 	DatabaseURL           string        `env:"DATABASE_URL" env-default:"postgres://shopping:shopping@127.0.0.1:5432/fx_settlement?sslmode=disable" env-description:"PostgreSQL DSN"`
 	LogLevel              string        `env:"LOG_LEVEL" env-default:"info" env-description:"Zap log level"`
 	CORSAllowedOrigins    []string      `env:"CORS_ALLOWED_ORIGINS" env-default:"http://localhost:5173,http://127.0.0.1:5173" env-separator:"," env-description:"Allowed CORS origins"`
@@ -52,6 +53,7 @@ func Load() (Config, error) {
 	cfg := Config{
 		HTTPPort:              v.GetString("HTTP_PORT"),
 		GRPCPort:              v.GetString("GRPC_PORT"),
+		RPCPort:               v.GetString("RPC_PORT"),
 		DatabaseURL:           v.GetString("DATABASE_URL"),
 		LogLevel:              v.GetString("LOG_LEVEL"),
 		CORSAllowedOrigins:    csvSlice(v.GetString("CORS_ALLOWED_ORIGINS")),
@@ -100,9 +102,14 @@ func (c Config) GRPCAddress() string {
 	return ":" + c.GRPCPort
 }
 
+func (c Config) RPCAddress() string {
+	return ":" + c.RPCPort
+}
+
 func applyDefaults(v *viper.Viper) {
 	v.SetDefault("HTTP_PORT", "8000")
 	v.SetDefault("GRPC_PORT", "9000")
+	v.SetDefault("RPC_PORT", "9100")
 	v.SetDefault("DATABASE_URL", "postgres://shopping:shopping@127.0.0.1:5432/fx_settlement?sslmode=disable")
 	v.SetDefault("LOG_LEVEL", "info")
 	v.SetDefault("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
@@ -124,6 +131,7 @@ func bindEnv(v *viper.Viper) {
 	keys := []string{
 		"HTTP_PORT",
 		"GRPC_PORT",
+		"RPC_PORT",
 		"DATABASE_URL",
 		"LOG_LEVEL",
 		"CORS_ALLOWED_ORIGINS",

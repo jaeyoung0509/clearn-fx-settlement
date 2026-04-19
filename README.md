@@ -21,6 +21,8 @@ Gin + GORM + PostgreSQL 기반의 핀테크 강의용 FX 정산/환전 백엔드
   - Gin handler, request validation, response mapping
 - `internal/adapter/inbound/grpc`
   - protobuf/gRPC service mapping, metadata extraction, status code mapping
+- `internal/adapter/inbound/rpc`
+  - stdlib net/rpc service mapping, request DTO 변환
 - `internal/adapter/outbound/postgres`
   - GORM store + transaction boundary + inbox/outbox persistence
 - `internal/adapter/outbound/frankfurter`
@@ -50,8 +52,15 @@ Gin + GORM + PostgreSQL 기반의 핀테크 강의용 FX 정산/환전 백엔드
 - `fx.v1.FXService/CreateConversion`
 - `fx.v1.FXService/GetConversion`
 
+## RPC API
+- `FXRPCService.GetRates`
+- `FXRPCService.CreateQuote`
+- `FXRPCService.CreateConversion`
+- `FXRPCService.GetConversion`
+
 모든 성공 응답은 `{ success, eventTime, data }`, 에러 응답은 `{ eventTime, error: { code, message, details, requestId } }`를 유지합니다.
 gRPC는 같은 usecase를 재사용하고, `Idempotency-Key` 대신 gRPC metadata의 `idempotency-key`를 사용합니다.
+RPC는 같은 usecase를 재사용하고, `IdempotencyKey`를 요청 DTO 필드로 받습니다.
 
 ## Domain Notes
 - 기준 통화는 `KRW`
@@ -68,6 +77,7 @@ docker compose up -d postgres
 go run ./cmd/migrate up
 go run ./cmd/api
 go run ./cmd/grpc
+go run ./cmd/rpc
 ```
 
 ## Example Requests

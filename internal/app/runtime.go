@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"net/http"
+	stdrpc "net/rpc"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -13,6 +14,7 @@ import (
 
 	grpcadapter "fx-settlement-lab/go-backend/internal/adapter/inbound/grpc"
 	httpadapter "fx-settlement-lab/go-backend/internal/adapter/inbound/http"
+	rpcadapter "fx-settlement-lab/go-backend/internal/adapter/inbound/rpc"
 	"fx-settlement-lab/go-backend/internal/adapter/outbound/frankfurter"
 	"fx-settlement-lab/go-backend/internal/adapter/outbound/logger"
 	"fx-settlement-lab/go-backend/internal/adapter/outbound/observability"
@@ -29,6 +31,7 @@ type Runtime struct {
 	Logger          *zap.Logger
 	Router          http.Handler
 	GRPCServer      *grpcpkg.Server
+	RPCServer       *stdrpc.Server
 	Pool            *pgxpool.Pool
 	SQLDB           *sql.DB
 	ShutdownTimeout time.Duration
@@ -112,11 +115,24 @@ func Bootstrap(ctx context.Context, cfg config.Config) (*Runtime, error) {
 		AcceptQuote:       usecases.AcceptQuote,
 		GetConversion:     usecases.GetConversion,
 	})
+	rpcServer, err := rpcadapter.NewServer(rpcadapter.ServerDeps{
+		GetReferenceRates: usecases.GetReferenceRates,
+		CreateQuote:       usecases.CreateQuote,
+		AcceptQuote:       usecases.AcceptQuote,
+		GetConversion:     usecases.GetConversion,
+	})
+	if err != nil {
+		_ = sqlDB.Close()
+		pool.Close()
+		_ = appLogger.Sync()
+		return nil, err
+	}
 
 	return &Runtime{
 		Logger:          appLogger,
 		Router:          router,
 		GRPCServer:      grpcServer,
+		RPCServer:       rpcServer,
 		Pool:            pool,
 		SQLDB:           sqlDB,
 		ShutdownTimeout: cfg.ShutdownTimeout,
