@@ -1,0 +1,95 @@
+syntax = "proto3";
+
+package fx.v1;
+
+option go_package = "fx-settlement-lab/go-backend/proto/fx/v1;fxv1";
+
+import "google/protobuf/timestamp.proto";
+
+service FXService {
+  rpc GetRates(GetRatesRequest) returns (GetRatesResponse);
+  rpc CreateQuote(CreateQuoteRequest) returns (Quote);
+  rpc CreateConversion(CreateConversionRequest) returns (Conversion);
+  rpc GetConversion(GetConversionRequest) returns (Conversion);
+}
+
+message MoneyInput {
+  string currency = 1;
+  int64 minor_units = 2;
+}
+
+message Money {
+  string currency = 1;
+  int64 minor_units = 2;
+  int32 scale = 3;
+  string amount = 4;
+}
+
+message ReferenceRate {
+  string base_currency = 1;
+  string quote_currency = 2;
+  string rate = 3;
+  string provider = 4;
+  google.protobuf.Timestamp observed_at = 5;
+  google.protobuf.Timestamp fetched_at = 6;
+}
+
+message GetRatesRequest {
+  string base = 1;
+  repeated string quotes = 2;
+}
+
+message GetRatesResponse {
+  string base_currency = 1;
+  string provider = 2;
+  repeated ReferenceRate rates = 3;
+}
+
+message CreateQuoteRequest {
+  MoneyInput base_amount = 1;
+  string quote_currency = 2;
+}
+
+message Quote {
+  string id = 1;
+  string idempotency_key = 2;
+  Money base_amount = 3;
+  Money quote_amount = 4;
+  Money fee_amount = 5;
+  Money total_debit_amount = 6;
+  string rate = 7;
+  string rate_provider = 8;
+  google.protobuf.Timestamp expires_at = 9;
+  google.protobuf.Timestamp accepted_at = 10;
+  google.protobuf.Timestamp created_at = 11;
+}
+
+message CreateConversionRequest {
+  string quote_id = 1;
+  string payment_provider = 2;
+  string transfer_provider = 3;
+}
+
+message GetConversionRequest {
+  string conversion_id = 1;
+}
+
+message Conversion {
+  string id = 1;
+  string quote_id = 2;
+  string idempotency_key = 3;
+  Money base_amount = 4;
+  Money quote_amount = 5;
+  Money fee_amount = 6;
+  Money total_debit_amount = 7;
+  string rate = 8;
+  string rate_provider = 9;
+  string payment_provider = 10;
+  string transfer_provider = 11;
+  string status = 12;
+  string external_payment_id = 13;
+  string external_transfer_id = 14;
+  string failure_reason = 15;
+  google.protobuf.Timestamp created_at = 16;
+  google.protobuf.Timestamp updated_at = 17;
+}
