@@ -1,84 +1,128 @@
-# FX Settlement Go Backend
+*** Begin File
+# FX Settlement Lab — Go Backend
 
-Gin + GORM + PostgreSQL 기반의 핀테크 강의용 FX 정산/환전 백엔드입니다.
+This repository is a lecture-style, hands-on fintech backend for FX settlement and currency conversion, implemented in Go using DDD, Ports & Adapters (Hexagonal), and Clean Architecture. The project is designed so that each commit represents a small lecture or step: check out a commit, read the files, run the tests, and learn.
 
-## Architecture
-- `internal/domain/shared`
-  - `Money`, `Currency`, `ExchangeRate`, `IdempotencyKey`, `ProviderEvent`
-- `internal/domain/quote`
-  - 견적 생성, 만료, 수락 가능 여부
-- `internal/domain/conversion`
-  - 환전 요청 상태 전이
-- `internal/domain/webhook`
-  - inbox message 모델
-- `internal/domain/outbox`
-  - 발행 대기 이벤트 모델
-- `internal/usecase`
-  - `GetReferenceRates`, `SyncReferenceRates`, `CreateQuote`, `AcceptQuote`, `GetConversion`, `HandlePaymentWebhook`, `HandleTransferWebhook`, `PublishOutbox`
-- `internal/port`
-  - repository / provider / publisher / clock / telemetry / unit of work 계약
-- `internal/adapter/inbound/http`
-  - Gin handler, request validation, response mapping
-- `internal/adapter/inbound/grpc`
-  - protobuf/gRPC service mapping, metadata extraction, status code mapping
-- `internal/adapter/inbound/rpc`
-  - stdlib net/rpc service mapping, request DTO 변환
-- `internal/adapter/outbound/postgres`
-  - GORM store + transaction boundary + inbox/outbox persistence
-- `internal/adapter/outbound/frankfurter`
-  - 무료 reference rate provider
-- `internal/adapter/outbound/{toss,stripe,plaid,wise}`
-  - 후속 실습용 provider seam
-- `internal/adapter/outbound/webhooksigning`
-  - 로컬/강의용 HMAC webhook 검증
-- `internal/adapter/outbound/observability`
-  - Prometheus exporter + request/domain telemetry
+What this repo teaches
+- Domain-first development: build the domain model first, add framework adapters later.
+- Usecases as the application core: usecases orchestrate domain logic and remain stable across transports.
+- Multi-transport reuse: HTTP, gRPC, and net/rpc all reuse the same usecases.
+- Outbox / Inbox seam: design for event-driven flows (easy to migrate to Kafka later).
+- Observability: instrument transports and domain logic with Prometheus and visualize with Grafana.
 
-현재는 `모놀리식 + 분리 경계` 구조입니다. 나중에 `quote`, `conversion`, `webhook`, `ledger`, `notification`으로 분리할 수 있게 이름과 경계를 먼저 맞춰뒀습니다.
+Philosophy
+- Design the domain and contracts before wiring adapters.
+- Keep usecases framework-agnostic and testable.
+- Treat adapters as replaceable seams.
+- Observability is a verification tool, not just decoration.
 
-## Public API
-- `GET /api/v1/rates?base=KRW&quotes=USD,JPY,EUR`
-- `POST /api/v1/quotes`
-- `POST /api/v1/conversions`
-- `GET /api/v1/conversions/:conversionId`
-- `POST /api/v1/webhooks/payments`
-- `POST /api/v1/webhooks/transfers`
-- `GET /health`
-- `GET /ready`
+Architecture (at a glance)
 
-## gRPC API
-- `fx.v1.FXService/GetRates`
-- `fx.v1.FXService/CreateQuote`
-- `fx.v1.FXService/CreateConversion`
-- `fx.v1.FXService/GetConversion`
+```
+HTTP / gRPC / net-rpc
+        |
+        v
+  inbound adapters
+        |
+        v
+      usecases
+        |
+        v
+       ports
+        |
+        v
+ outbound adapters
+        |
+        +--> PostgreSQL
+        +--> Frankfurter FX API
+        +--> webhook verifier (HMAC)
+        +--> event publisher / outbox
+        +--> Prometheus telemetry
+```
 
-## RPC API
-- `FXRPCService.GetRates`
-- `FXRPCService.CreateQuote`
-- `FXRPCService.CreateConversion`
-- `FXRPCService.GetConversion`
+Package map (key folders)
+- `internal/domain/shared` — `Money`, `Currency`, `ExchangeRate`, `IdempotencyKey`, `ProviderEvent`
+- `internal/domain/quote` — quote aggregate and validation
+- `internal/domain/conversion` — conversion state transitions
+- `internal/domain/webhook` — inbox message model
+- `internal/domain/outbox` — outbox event model
+- `internal/usecase` — `GetReferenceRates`, `CreateQuote`, `AcceptQuote`, `GetConversion`, `HandlePaymentWebhook`, `HandleTransferWebhook`, `PublishOutbox`
+- `internal/port` — repository/provider/publisher/clock/telemetry/unit-of-work contracts
+- `internal/adapter/inbound/http` — Gin handlers, validation, response mapping, middleware
+- `internal/adapter/inbound/grpc` — protobuf/gRPC service adapter, metadata handling
+- `internal/adapter/inbound/rpc` — stdlib net/rpc adapter
+- `internal/adapter/outbound/postgres` — GORM store, transactions, migrations, inbox/outbox persistence
+- `internal/adapter/outbound/frankfurter` — reference rate provider adapter
+- `internal/adapter/outbound/webhooksigning` — HMAC webhook verification for lecture demos
+- `internal/adapter/outbound/observability` — Prometheus exporters and telemetry helpers
+- `cmd/` — entrypoints: `api`, `grpc`, `rpc`, `migrate`
 
-## Metrics Endpoints
-- HTTP metrics: `GET http://localhost:9101/metrics`
-- gRPC metrics: `GET http://localhost:9102/metrics`
-- RPC metrics: `GET http://localhost:9103/metrics`
+Prerequisites
+- Go 1.22+
+- Docker and Docker Compose (for local DB and monitoring stack)
+- macOS or Linux shell
+- Optional but helpful: `grpcurl` for gRPC examples, `jq` for JSON inspection
 
-공통 메트릭은 `fx_inbound_requests_total`, `fx_inbound_request_duration_seconds`로 노출되고, `transport`, `operation`, `outcome` 라벨을 가집니다.
-도메인 메트릭은 `fx_webhook_duplicate_total`, `fx_webhook_accepted_total`, `fx_outbox_published_total`, `fx_outbox_publish_failed_total`를 그대로 유지합니다.
+Local ports (defaults)
+| Purpose | Address | Notes |
+|---|---:|---|
+| HTTP API | `:8000` | REST endpoints (Gin) |
+| gRPC API | `:9000` | proto-defined API |
+| net/rpc API | `:9100` | legacy RPC adapter |
+| HTTP metrics | `:9101` | Prometheus endpoint for HTTP process |
+| gRPC metrics | `:9102` | Prometheus endpoint for gRPC process |
+| RPC metrics | `:9103` | Prometheus endpoint for RPC process |
+| PostgreSQL | `:5432` | application DB |
+| Prometheus | `:9090` | metrics server |
+| Grafana | `:3000` | dashboard UI |
 
-모든 성공 응답은 `{ success, eventTime, data }`, 에러 응답은 `{ eventTime, error: { code, message, details, requestId } }`를 유지합니다.
-gRPC는 같은 usecase를 재사용하고, `Idempotency-Key` 대신 gRPC metadata의 `idempotency-key`를 사용합니다.
-RPC는 같은 usecase를 재사용하고, `IdempotencyKey`를 요청 DTO 필드로 받습니다.
+Study workflow (recommended)
+1. Read this README to get the big picture.
+2. Inspect the git history: each commit is a lecture.
 
-## Domain Notes
-- 기준 통화는 `KRW`
-- 기본 corridor는 `KRW/USD`, `KRW/JPY`, `KRW/EUR`
-- 금액은 `minor unit integer` 기반으로 처리하고 `float`는 사용하지 않습니다
-- `POST /quotes`, `POST /conversions`는 `Idempotency-Key` 헤더가 필요합니다
-- webhook dedupe 기준은 `provider + externalEventId`
-- 첫 단계에서는 `견적 -> 환전 요청 -> payment webhook -> transfer webhook -> 상태 변경 -> outbox 적재` 흐름에 집중합니다
+```bash
+git log --reverse --oneline
+git checkout <commit-hash>   # jump to a lecture
+git switch main              # return to the main branch
+git diff <older> <newer>     # view what changed between lectures
+```
 
-## Local Run
+Lecture roadmap (high-level)
+| Lecture | Commit | Topic |
+|---:|---|---|
+| 00 | `896311d` | Foundation & configuration (config, logger, testable start) |
+| 01 | `5bad74c` | Core domain & port contracts (Money, Quote, Conversion) |
+| 02 | `768bf4b` | Usecase layer (application orchestration) |
+| 03 | `d7321d8` | Outbound adapter seams (providers, publisher, observability) |
+| 04 | `825316b` | PostgreSQL persistence, migrations, inbox/outbox |
+| 05 | `601710b` | HTTP inbound adapter (Gin, validation, error envelope) |
+| 06 | `c973c93` | Runtime & local environment (composition root, docker) |
+| 07 | `e7232c6` | Reusable utilities (keyset pagination) |
+| 08 | `fc41ba6` | gRPC adapter (proto contract) |
+| 09 | `b83af70` | Standalone gRPC runtime |
+| 10 | `5e9b3c4` | net/rpc adapter |
+| 11 | `4ffbb84` | Standalone net/rpc runtime |
+| 12 | `9d06692` | Prometheus instrumentation (transport + domain) |
+| 13 | `a596271` | Local Prometheus & Grafana stack |
+| 14 | `5e2a593` | Make-based observability demo (one-line reproducible run) |
+
+Lecture details (short)
+- Lecture 00 — Foundation: set up `internal/config`, logger, and a testable app entrypoint.
+- Lecture 01 — Domain: model `Money`, `IdempotencyKey`, `Quote`, and `Conversion` aggregates.
+- Lecture 02 — Usecases: implement `CreateQuote`, `AcceptQuote`, `GetConversion`, and rate sync.
+- Lecture 03 — Outbound adapters: implement the Frankfurter provider seam, webhook HMAC seam, and logging publisher.
+- Lecture 04 — Persistence: add GORM-based store, migrations, and inbox/outbox tables.
+- Lecture 05 — HTTP inbound: Gin handlers, validation rules, middleware, and error envelope.
+- Lecture 06 — Runtime: composition root wiring, `.env` handling, Docker Compose and migrations.
+- Lecture 07 — Utilities: add a reusable keyset pagination utility for listing endpoints.
+- Lecture 08/09 — gRPC: proto-first contract and a standalone gRPC process.
+- Lecture 10/11 — net/rpc: legacy RPC adapter and standalone process for demonstration.
+- Lecture 12 — Observability: add Prometheus metrics for throughput, latency, and outcomes.
+- Lecture 13 — Monitoring: provision Prometheus + Grafana and a dashboard for quick comparison.
+- Lecture 14 — Demo: provide `Makefile` + `scripts/observability_demo.sh` + `cmd/demo-traffic` to reproduce metrics from all transports.
+
+Quick start (minimal)
+
 ```bash
 cp .env.example .env
 docker compose up -d postgres prometheus grafana
@@ -88,30 +132,32 @@ go run ./cmd/grpc
 go run ./cmd/rpc
 ```
 
-## Make Targets
+Make targets (convenience)
+
 ```bash
-make infra-up
-make migrate-up
-make run-api
-make run-grpc
-make run-rpc
+make infra-up         # start docker-based infra
+make migrate-up       # apply DB migrations
+make run-api          # run HTTP server (foreground)
+make run-grpc         # run gRPC server
+make run-rpc          # run net/rpc server
 ```
 
-관측성 데모를 한 번에 확인하려면 아래 한 줄이면 됩니다.
+Observability demo (one-liner)
 
 ```bash
 make observability-demo
 ```
 
-이 타깃은 다음 순서로 실행됩니다.
-- `.env`가 없으면 `.env.example`을 복사
-- postgres, prometheus, grafana 기동
-- migration 적용
-- HTTP, gRPC, net/rpc 서버를 백그라운드로 실행
-- 세 transport에 샘플 성공/실패 요청을 전송
-- 각 metrics endpoint에서 `fx_inbound_requests_total`을 출력
+What `make observability-demo` does
+- Ensures `.env` exists (copies from `.env.example` if missing)
+- Starts Postgres, Prometheus, and Grafana via Docker Compose
+- Waits for Postgres to become healthy
+- Runs migrations
+- Starts the HTTP, gRPC, and net/rpc servers in the background
+- Sends sample success and error traffic to each transport
+- Prints `fx_inbound_requests_total` from each metrics endpoint
 
-샘플 트래픽만 따로 보내고 싶으면 아래 타깃을 사용하면 됩니다.
+If you only want sample traffic or metrics snapshots:
 
 ```bash
 make observability-traffic
@@ -119,10 +165,36 @@ make metrics-snapshot
 make prometheus-query
 ```
 
-Grafana는 `http://localhost:3000`에서 `admin/admin`으로 바로 들어갈 수 있고, Prometheus datasource와 대시보드를 자동으로 provisioning 합니다.
-Prometheus는 `http://localhost:9090`에서 각 프로세스의 metrics endpoint를 scrape 합니다.
+Public API (HTTP)
+- `GET /api/v1/rates?base=KRW&quotes=USD,JPY,EUR`
+- `POST /api/v1/quotes`
+- `POST /api/v1/conversions`
+- `GET /api/v1/conversions/:conversionId`
+- `POST /api/v1/webhooks/payments`
+- `POST /api/v1/webhooks/transfers`
+- `GET /health`
+- `GET /ready`
 
-## Example Requests
+gRPC API (proto)
+- `fx.v1.FXService/GetRates`
+- `fx.v1.FXService/CreateQuote`
+- `fx.v1.FXService/CreateConversion`
+- `fx.v1.FXService/GetConversion`
+
+net/rpc API
+- `FXRPCService.GetRates`
+- `FXRPCService.CreateQuote`
+- `FXRPCService.CreateConversion`
+- `FXRPCService.GetConversion`
+
+Transport notes
+- All transports reuse the same usecases.
+- HTTP uses an `Idempotency-Key` header.
+- gRPC uses metadata `idempotency-key`.
+- net/rpc uses an `IdempotencyKey` field in the request DTO.
+
+Example requests (HTTP)
+
 ```bash
 curl 'http://localhost:8000/api/v1/rates?base=KRW&quotes=USD,JPY,EUR'
 ```
@@ -132,10 +204,7 @@ curl -X POST 'http://localhost:8000/api/v1/quotes' \
   -H 'Content-Type: application/json' \
   -H 'Idempotency-Key: quote-001' \
   -d '{
-    "baseAmount": {
-      "currency": "KRW",
-      "minorUnits": 100000
-    },
+    "baseAmount": {"currency":"KRW","minorUnits":100000},
     "quoteCurrency": "USD"
   }'
 ```
@@ -144,54 +213,78 @@ curl -X POST 'http://localhost:8000/api/v1/quotes' \
 curl -X POST 'http://localhost:8000/api/v1/conversions' \
   -H 'Content-Type: application/json' \
   -H 'Idempotency-Key: conversion-001' \
-  -d '{
-    "quoteId": "01JS0000000000000000000000"
-  }'
+  -d '{"quoteId":"01JS0000000000000000000000"}'
 ```
+
+gRPC example with `grpcurl`
 
 ```bash
-grpcurl -plaintext \
-  -H 'idempotency-key: grpc-quote-001' \
-  -d '{
-    "baseAmount": {
-      "currency": "KRW",
-      "minorUnits": 100000
-    },
-    "quoteCurrency": "USD"
-  }' \
-  localhost:9000 fx.v1.FXService/CreateQuote
+grpcurl -plaintext -H 'idempotency-key: grpc-quote-001' -d '{
+  "baseAmount": {"currency":"KRW","minorUnits":100000},
+  "quoteCurrency": "USD"
+}' localhost:9000 fx.v1.FXService/CreateQuote
 ```
 
-## Monitoring Walkthrough
+Monitoring and metrics
+
+Metrics endpoints (default)
+- HTTP: `http://localhost:9101/metrics`
+- gRPC: `http://localhost:9102/metrics`
+- net/rpc: `http://localhost:9103/metrics`
+
+Common metrics
+- `fx_inbound_requests_total{transport,operation,outcome}`
+- `fx_inbound_request_duration_seconds{transport,operation}`
+
+Domain metrics
+- `fx_webhook_duplicate_total`
+- `fx_webhook_accepted_total`
+- `fx_outbox_published_total`
+- `fx_outbox_publish_failed_total`
+
+Quick checks
+
 ```bash
 curl http://localhost:9101/metrics | grep fx_inbound_requests_total
 curl http://localhost:9102/metrics | grep fx_inbound_requests_total
 curl http://localhost:9103/metrics | grep fx_inbound_requests_total
 ```
 
-Grafana 대시보드에서는 다음을 바로 비교할 수 있습니다.
-- transport/job별 요청 처리량
-- transport/job별 p95 latency
-- transport별 client_error / server_error 비율
-- webhook 중복/수락 카운트와 outbox publish 결과
+Grafana
+- Dashboard available at `http://localhost:3000` (default `admin/admin`). Provisioning is done via the repo's `monitoring/grafana` folder.
 
-## Tests
+Testing
+
 ```bash
 go test ./...
 ```
 
-### Integration Testing Notes
-- 통합테스트는 `testcontainers-go`로 PostgreSQL 컨테이너를 띄웁니다.
-- Docker가 없거나 데몬에 접근할 수 없는 환경에서는 통합테스트를 자동으로 skip 합니다.
-- top-level test 당 컨테이너 1개만 생성하고 subtest마다 `Reset(t)`으로 상태를 비웁니다.
-- cleanup은 `t.Cleanup`으로 등록해서 DB/pool이 먼저 닫히고 컨테이너가 마지막에 내려가도록 설계했습니다.
-- Docker가 있는 로컬과 GitHub Actions를 동일한 전제로 가져갈 수 있습니다.
+Integration testing notes
+- Integration tests use `testcontainers-go` to start a PostgreSQL container; tests automatically skip when Docker is unavailable.
+- Each top-level test creates a single container; subtests reset state with `Reset(t)`.
+- Cleanup is registered with `t.Cleanup` so DB connections close before the container stops.
 
-## Sandbox Direction
-- 기본 환율 provider: [Frankfurter](https://frankfurter.dev/docs/)
-- 한국 결제 webhook 데모: Toss Payments 테스트 키
-- 글로벌 결제 확장: Stripe sandbox/test mode
-- 은행/계좌 이벤트 확장: Plaid sandbox
-- 송금/정산 확장: Wise sandbox
+Domain notes
+- Base currency: `KRW`.
+- Default corridors: `KRW/USD`, `KRW/JPY`, `KRW/EUR`.
+- Money is stored in minor units (integer). Floating point is not used for amounts.
+- `POST /quotes` and `POST /conversions` require idempotency keys.
+- Webhook deduplication key: `provider + externalEventId`.
+- Core flow for the hands-on labs: `quote -> conversion -> payment webhook -> transfer webhook -> state change -> outbox enqueue`.
 
-현재 구현은 Frankfurter를 실제로 붙이고, payment/transfer webhook은 강의용 HMAC 검증기와 inbox/outbox 흐름을 먼저 고정한 상태입니다.
+Next steps after this repo (suggestions for further lectures)
+- Replace DB-backed outbox with Kafka-based publisher and add an inbox consumer.
+- Split the monolith by bounded contexts (quote, conversion, webhook, ledger, notification).
+- Move from sync request/response to event-driven flows with eventual consistency.
+- Expand observability from metrics to traces and log correlation.
+
+Sandbox integrations & notes
+- Reference rate provider: Frankfurter (https://frankfurter.dev/docs/)
+- Local webhook demo: Toss Payments test keys
+- Global payment expansion: Stripe sandbox/test mode
+- Bank/account data: Plaid sandbox
+- Cross-border/settlement: Wise sandbox
+
+The repository currently connects to Frankfurter for reference rates and includes a lecture-grade HMAC webhook verifier and inbox/outbox flow for webhook handling.
+
+*** End File
