@@ -12,6 +12,7 @@ import (
 
 	"fx-settlement-lab/go-backend/internal/app"
 	"fx-settlement-lab/go-backend/internal/config"
+
 	"go.uber.org/zap"
 )
 
