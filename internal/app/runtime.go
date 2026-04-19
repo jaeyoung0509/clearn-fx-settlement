@@ -9,7 +9,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
+	grpcpkg "google.golang.org/grpc"
 
+	grpcadapter "fx-settlement-lab/go-backend/internal/adapter/inbound/grpc"
 	httpadapter "fx-settlement-lab/go-backend/internal/adapter/inbound/http"
 	"fx-settlement-lab/go-backend/internal/adapter/outbound/frankfurter"
 	"fx-settlement-lab/go-backend/internal/adapter/outbound/logger"
@@ -26,6 +28,7 @@ import (
 type Runtime struct {
 	Logger          *zap.Logger
 	Router          http.Handler
+	GRPCServer      *grpcpkg.Server
 	Pool            *pgxpool.Pool
 	SQLDB           *sql.DB
 	ShutdownTimeout time.Duration
@@ -103,10 +106,17 @@ func Bootstrap(ctx context.Context, cfg config.Config) (*Runtime, error) {
 		ReadyChecker:            pool,
 		CORSAllowedOrigins:      cfg.CORSAllowedOrigins,
 	})
+	grpcServer := grpcadapter.NewServer(grpcadapter.ServerDeps{
+		GetReferenceRates: usecases.GetReferenceRates,
+		CreateQuote:       usecases.CreateQuote,
+		AcceptQuote:       usecases.AcceptQuote,
+		GetConversion:     usecases.GetConversion,
+	})
 
 	return &Runtime{
 		Logger:          appLogger,
 		Router:          router,
+		GRPCServer:      grpcServer,
 		Pool:            pool,
 		SQLDB:           sqlDB,
 		ShutdownTimeout: cfg.ShutdownTimeout,

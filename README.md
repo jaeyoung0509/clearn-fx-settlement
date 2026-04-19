@@ -19,6 +19,8 @@ Gin + GORM + PostgreSQL 기반의 핀테크 강의용 FX 정산/환전 백엔드
   - repository / provider / publisher / clock / telemetry / unit of work 계약
 - `internal/adapter/inbound/http`
   - Gin handler, request validation, response mapping
+- `internal/adapter/inbound/grpc`
+  - protobuf/gRPC service mapping, metadata extraction, status code mapping
 - `internal/adapter/outbound/postgres`
   - GORM store + transaction boundary + inbox/outbox persistence
 - `internal/adapter/outbound/frankfurter`
@@ -42,7 +44,14 @@ Gin + GORM + PostgreSQL 기반의 핀테크 강의용 FX 정산/환전 백엔드
 - `GET /health`
 - `GET /ready`
 
+## gRPC API
+- `fx.v1.FXService/GetRates`
+- `fx.v1.FXService/CreateQuote`
+- `fx.v1.FXService/CreateConversion`
+- `fx.v1.FXService/GetConversion`
+
 모든 성공 응답은 `{ success, eventTime, data }`, 에러 응답은 `{ eventTime, error: { code, message, details, requestId } }`를 유지합니다.
+gRPC는 같은 usecase를 재사용하고, `Idempotency-Key` 대신 gRPC metadata의 `idempotency-key`를 사용합니다.
 
 ## Domain Notes
 - 기준 통화는 `KRW`
@@ -58,6 +67,7 @@ cp .env.example .env
 docker compose up -d postgres
 go run ./cmd/migrate up
 go run ./cmd/api
+go run ./cmd/grpc
 ```
 
 ## Example Requests
@@ -85,6 +95,19 @@ curl -X POST 'http://localhost:8000/api/v1/conversions' \
   -d '{
     "quoteId": "01JS0000000000000000000000"
   }'
+```
+
+```bash
+grpcurl -plaintext \
+  -H 'idempotency-key: grpc-quote-001' \
+  -d '{
+    "baseAmount": {
+      "currency": "KRW",
+      "minorUnits": 100000
+    },
+    "quoteCurrency": "USD"
+  }' \
+  localhost:9000 fx.v1.FXService/CreateQuote
 ```
 
 ## Tests
