@@ -287,4 +287,3 @@ Sandbox integrations & notes
 
 The repository currently connects to Frankfurter for reference rates and includes a lecture-grade HMAC webhook verifier and inbox/outbox flow for webhook handling.
 
-*** End File
