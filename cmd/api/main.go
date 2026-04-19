@@ -38,11 +38,20 @@ func run() error {
 		Handler:           runtime.Router,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
+	metricsServer := &http.Server{
+		Addr:              cfg.HTTPMetricsAddress(),
+		Handler:           runtime.MetricsHandler,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
 
-	serverErrors := make(chan error, 1)
+	serverErrors := make(chan error, 2)
 	go func() {
 		runtime.Logger.Info("starting http server", zap.String("addr", cfg.HTTPAddress()))
 		serverErrors <- server.ListenAndServe()
+	}()
+	go func() {
+		runtime.Logger.Info("starting metrics server", zap.String("addr", cfg.HTTPMetricsAddress()))
+		serverErrors <- metricsServer.ListenAndServe()
 	}()
 
 	signals := make(chan os.Signal, 1)
@@ -61,6 +70,9 @@ func run() error {
 	defer cancel()
 
 	if err := server.Shutdown(shutdownCtx); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+	if err := metricsServer.Shutdown(shutdownCtx); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
 

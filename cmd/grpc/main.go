@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -37,11 +39,20 @@ func run() error {
 		return err
 	}
 	defer func() { _ = listener.Close() }()
+	metricsServer := &http.Server{
+		Addr:              cfg.GRPCMetricsAddress(),
+		Handler:           runtime.MetricsHandler,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
 
-	serverErrors := make(chan error, 1)
+	serverErrors := make(chan error, 2)
 	go func() {
 		runtime.Logger.Info("starting grpc server", zap.String("addr", cfg.GRPCAddress()))
 		serverErrors <- runtime.GRPCServer.Serve(listener)
+	}()
+	go func() {
+		runtime.Logger.Info("starting metrics server", zap.String("addr", cfg.GRPCMetricsAddress()))
+		serverErrors <- metricsServer.ListenAndServe()
 	}()
 
 	signals := make(chan os.Signal, 1)
@@ -49,7 +60,7 @@ func run() error {
 
 	select {
 	case err := <-serverErrors:
-		if err != nil {
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			return err
 		}
 	case <-signals:
@@ -66,6 +77,13 @@ func run() error {
 	case <-gracefulStopDone:
 	case <-time.After(runtime.ShutdownTimeout):
 		runtime.GRPCServer.Stop()
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), runtime.ShutdownTimeout)
+	defer cancel()
+
+	if err := metricsServer.Shutdown(shutdownCtx); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return err
 	}
 
 	return nil

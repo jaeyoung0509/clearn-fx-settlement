@@ -2,6 +2,7 @@ package grpcadapter
 
 import (
 	"context"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 	grpcpkg "google.golang.org/grpc"
@@ -15,6 +16,7 @@ import (
 	"fx-settlement-lab/go-backend/internal/domain/conversion"
 	"fx-settlement-lab/go-backend/internal/domain/quote"
 	"fx-settlement-lab/go-backend/internal/domain/shared"
+	"fx-settlement-lab/go-backend/internal/port"
 	"fx-settlement-lab/go-backend/internal/usecase"
 	fxv1 "fx-settlement-lab/go-backend/proto/fx/v1"
 )
@@ -26,6 +28,7 @@ type ServerDeps struct {
 	CreateQuote       *usecase.CreateQuoteUsecase
 	AcceptQuote       *usecase.AcceptQuoteUsecase
 	GetConversion     *usecase.GetConversionUsecase
+	Telemetry         port.Telemetry
 }
 
 type FXService struct {
@@ -39,7 +42,12 @@ type FXService struct {
 var _ fxv1.FXServiceServer = (*FXService)(nil)
 
 func NewServer(deps ServerDeps) *grpcpkg.Server {
-	server := grpcpkg.NewServer()
+	options := make([]grpcpkg.ServerOption, 0, 1)
+	if deps.Telemetry != nil {
+		options = append(options, grpcpkg.UnaryInterceptor(unaryMetricsInterceptor(deps.Telemetry)))
+	}
+
+	server := grpcpkg.NewServer(options...)
 	fxv1.RegisterFXServiceServer(server, &FXService{
 		getReferenceRates: deps.GetReferenceRates,
 		createQuote:       deps.CreateQuote,
@@ -49,6 +57,27 @@ func NewServer(deps ServerDeps) *grpcpkg.Server {
 	reflection.Register(server)
 
 	return server
+}
+
+func unaryMetricsInterceptor(telemetry port.Telemetry) grpcpkg.UnaryServerInterceptor {
+	return func(ctx context.Context, req any, info *grpcpkg.UnaryServerInfo, handler grpcpkg.UnaryHandler) (any, error) {
+		started := time.Now()
+		response, err := handler(ctx, req)
+		telemetry.RecordInboundRequest(ctx, "grpc", info.FullMethod, classifyGRPCOutcome(status.Code(err)), time.Since(started))
+
+		return response, err
+	}
+}
+
+func classifyGRPCOutcome(code codes.Code) string {
+	switch code {
+	case codes.OK:
+		return "success"
+	case codes.InvalidArgument, codes.NotFound, codes.FailedPrecondition, codes.Unauthenticated:
+		return "client_error"
+	default:
+		return "server_error"
+	}
 }
 
 func (s *FXService) GetRates(ctx context.Context, req *fxv1.GetRatesRequest) (*fxv1.GetRatesResponse, error) {

@@ -26,6 +26,9 @@ func TestLoadFromDotEnv(t *testing.T) {
 		"HTTP_PORT=9000\n"+
 			"GRPC_PORT=9100\n"+
 			"RPC_PORT=9200\n"+
+			"HTTP_METRICS_PORT=9201\n"+
+			"GRPC_METRICS_PORT=9202\n"+
+			"RPC_METRICS_PORT=9203\n"+
 			"DATABASE_URL=postgres://example:example@localhost:5432/app?sslmode=disable\n"+
 			"LOG_LEVEL=debug\n"+
 			"CORS_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173\n"+
@@ -41,6 +44,9 @@ func TestLoadFromDotEnv(t *testing.T) {
 		"HTTP_PORT",
 		"GRPC_PORT",
 		"RPC_PORT",
+		"HTTP_METRICS_PORT",
+		"GRPC_METRICS_PORT",
+		"RPC_METRICS_PORT",
 		"DATABASE_URL",
 		"LOG_LEVEL",
 		"CORS_ALLOWED_ORIGINS",
@@ -56,6 +62,9 @@ func TestLoadFromDotEnv(t *testing.T) {
 	_ = os.Unsetenv("HTTP_PORT")
 	_ = os.Unsetenv("GRPC_PORT")
 	_ = os.Unsetenv("RPC_PORT")
+	_ = os.Unsetenv("HTTP_METRICS_PORT")
+	_ = os.Unsetenv("GRPC_METRICS_PORT")
+	_ = os.Unsetenv("RPC_METRICS_PORT")
 	_ = os.Unsetenv("DATABASE_URL")
 	_ = os.Unsetenv("LOG_LEVEL")
 	_ = os.Unsetenv("CORS_ALLOWED_ORIGINS")
@@ -79,6 +88,14 @@ func TestLoadFromDotEnv(t *testing.T) {
 	}
 	if cfg.RPCPort != "9200" {
 		t.Fatalf("unexpected RPC port: %s", cfg.RPCPort)
+	}
+	if cfg.HTTPMetricsPort != "9201" || cfg.GRPCMetricsPort != "9202" || cfg.RPCMetricsPort != "9203" {
+		t.Fatalf(
+			"unexpected metrics ports: http=%s grpc=%s rpc=%s",
+			cfg.HTTPMetricsPort,
+			cfg.GRPCMetricsPort,
+			cfg.RPCMetricsPort,
+		)
 	}
 	if cfg.LogLevel != "debug" {
 		t.Fatalf("unexpected log level: %s", cfg.LogLevel)
@@ -116,6 +133,9 @@ func TestLoadFromEnvironmentOnly(t *testing.T) {
 	t.Setenv("HTTP_PORT", "7000")
 	t.Setenv("GRPC_PORT", "7100")
 	t.Setenv("RPC_PORT", "7200")
+	t.Setenv("HTTP_METRICS_PORT", "7201")
+	t.Setenv("GRPC_METRICS_PORT", "7202")
+	t.Setenv("RPC_METRICS_PORT", "7203")
 	t.Setenv("PGX_MAX_CONNS", "12")
 	t.Setenv("PGX_MIN_CONNS", "3")
 	t.Setenv("OUTBOX_PUBLISH_BATCH", "42")
@@ -133,6 +153,14 @@ func TestLoadFromEnvironmentOnly(t *testing.T) {
 	}
 	if cfg.RPCPort != "7200" {
 		t.Fatalf("unexpected RPC port: %s", cfg.RPCPort)
+	}
+	if cfg.HTTPMetricsPort != "7201" || cfg.GRPCMetricsPort != "7202" || cfg.RPCMetricsPort != "7203" {
+		t.Fatalf(
+			"unexpected metrics ports: http=%s grpc=%s rpc=%s",
+			cfg.HTTPMetricsPort,
+			cfg.GRPCMetricsPort,
+			cfg.RPCMetricsPort,
+		)
 	}
 	if cfg.PGXMaxConns != 12 || cfg.PGXMinConns != 3 {
 		t.Fatalf("unexpected pgx config: min=%d max=%d", cfg.PGXMinConns, cfg.PGXMaxConns)
@@ -165,6 +193,9 @@ func TestEnvironmentOverridesDotEnv(t *testing.T) {
 		"HTTP_PORT=9000\n"+
 			"GRPC_PORT=9100\n"+
 			"RPC_PORT=9200\n"+
+			"HTTP_METRICS_PORT=9201\n"+
+			"GRPC_METRICS_PORT=9202\n"+
+			"RPC_METRICS_PORT=9203\n"+
 			"PGX_MAX_CONNS=20\n"+
 			"PGX_MIN_CONNS=5\n",
 	))
@@ -172,6 +203,9 @@ func TestEnvironmentOverridesDotEnv(t *testing.T) {
 	t.Setenv("HTTP_PORT", "9100")
 	t.Setenv("GRPC_PORT", "9200")
 	t.Setenv("RPC_PORT", "9300")
+	t.Setenv("HTTP_METRICS_PORT", "9301")
+	t.Setenv("GRPC_METRICS_PORT", "9302")
+	t.Setenv("RPC_METRICS_PORT", "9303")
 	t.Setenv("PGX_MAX_CONNS", "25")
 
 	cfg, err := Load()
@@ -187,6 +221,14 @@ func TestEnvironmentOverridesDotEnv(t *testing.T) {
 	}
 	if cfg.RPCPort != "9300" {
 		t.Fatalf("expected env override for RPC_PORT, got %s", cfg.RPCPort)
+	}
+	if cfg.HTTPMetricsPort != "9301" || cfg.GRPCMetricsPort != "9302" || cfg.RPCMetricsPort != "9303" {
+		t.Fatalf(
+			"unexpected metrics ports: http=%s grpc=%s rpc=%s",
+			cfg.HTTPMetricsPort,
+			cfg.GRPCMetricsPort,
+			cfg.RPCMetricsPort,
+		)
 	}
 	if cfg.PGXMaxConns != 25 {
 		t.Fatalf("expected env override for PGX_MAX_CONNS, got %d", cfg.PGXMaxConns)

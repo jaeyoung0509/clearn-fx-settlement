@@ -16,6 +16,9 @@ type Config struct {
 	HTTPPort              string        `env:"HTTP_PORT" env-default:"8000" env-description:"HTTP listen port"`
 	GRPCPort              string        `env:"GRPC_PORT" env-default:"9000" env-description:"gRPC listen port"`
 	RPCPort               string        `env:"RPC_PORT" env-default:"9100" env-description:"RPC listen port"`
+	HTTPMetricsPort       string        `env:"HTTP_METRICS_PORT" env-default:"9101" env-description:"HTTP metrics listen port"`
+	GRPCMetricsPort       string        `env:"GRPC_METRICS_PORT" env-default:"9102" env-description:"gRPC metrics listen port"`
+	RPCMetricsPort        string        `env:"RPC_METRICS_PORT" env-default:"9103" env-description:"RPC metrics listen port"`
 	DatabaseURL           string        `env:"DATABASE_URL" env-default:"postgres://shopping:shopping@127.0.0.1:5432/fx_settlement?sslmode=disable" env-description:"PostgreSQL DSN"`
 	LogLevel              string        `env:"LOG_LEVEL" env-default:"info" env-description:"Zap log level"`
 	CORSAllowedOrigins    []string      `env:"CORS_ALLOWED_ORIGINS" env-default:"http://localhost:5173,http://127.0.0.1:5173" env-separator:"," env-description:"Allowed CORS origins"`
@@ -54,6 +57,9 @@ func Load() (Config, error) {
 		HTTPPort:              v.GetString("HTTP_PORT"),
 		GRPCPort:              v.GetString("GRPC_PORT"),
 		RPCPort:               v.GetString("RPC_PORT"),
+		HTTPMetricsPort:       v.GetString("HTTP_METRICS_PORT"),
+		GRPCMetricsPort:       v.GetString("GRPC_METRICS_PORT"),
+		RPCMetricsPort:        v.GetString("RPC_METRICS_PORT"),
 		DatabaseURL:           v.GetString("DATABASE_URL"),
 		LogLevel:              v.GetString("LOG_LEVEL"),
 		CORSAllowedOrigins:    csvSlice(v.GetString("CORS_ALLOWED_ORIGINS")),
@@ -106,10 +112,25 @@ func (c Config) RPCAddress() string {
 	return ":" + c.RPCPort
 }
 
+func (c Config) HTTPMetricsAddress() string {
+	return ":" + c.HTTPMetricsPort
+}
+
+func (c Config) GRPCMetricsAddress() string {
+	return ":" + c.GRPCMetricsPort
+}
+
+func (c Config) RPCMetricsAddress() string {
+	return ":" + c.RPCMetricsPort
+}
+
 func applyDefaults(v *viper.Viper) {
 	v.SetDefault("HTTP_PORT", "8000")
 	v.SetDefault("GRPC_PORT", "9000")
 	v.SetDefault("RPC_PORT", "9100")
+	v.SetDefault("HTTP_METRICS_PORT", "9101")
+	v.SetDefault("GRPC_METRICS_PORT", "9102")
+	v.SetDefault("RPC_METRICS_PORT", "9103")
 	v.SetDefault("DATABASE_URL", "postgres://shopping:shopping@127.0.0.1:5432/fx_settlement?sslmode=disable")
 	v.SetDefault("LOG_LEVEL", "info")
 	v.SetDefault("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
@@ -132,6 +153,9 @@ func bindEnv(v *viper.Viper) {
 		"HTTP_PORT",
 		"GRPC_PORT",
 		"RPC_PORT",
+		"HTTP_METRICS_PORT",
+		"GRPC_METRICS_PORT",
+		"RPC_METRICS_PORT",
 		"DATABASE_URL",
 		"LOG_LEVEL",
 		"CORS_ALLOWED_ORIGINS",

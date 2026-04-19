@@ -7,6 +7,7 @@ import (
 
 	"fx-settlement-lab/go-backend/internal/adapter/inbound/http/middleware"
 	"fx-settlement-lab/go-backend/internal/adapter/outbound/webhooksigning"
+	"fx-settlement-lab/go-backend/internal/port"
 	"fx-settlement-lab/go-backend/internal/usecase"
 )
 
@@ -22,6 +23,7 @@ type RouterDeps struct {
 	PaymentWebhookVerifier  *webhooksigning.HMACVerifier
 	TransferWebhookVerifier *webhooksigning.HMACVerifier
 	CORSAllowedOrigins      []string
+	Telemetry               port.Telemetry
 }
 
 func NewRouter(deps RouterDeps) *gin.Engine {
@@ -30,6 +32,7 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 	engine := gin.New()
 	engine.Use(
 		middleware.RequestContext(deps.Logger),
+		middleware.RequestMetrics(deps.Telemetry),
 		middleware.RequestLogger(),
 		middleware.Recovery(),
 		cors.New(cors.Config{

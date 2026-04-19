@@ -30,6 +30,7 @@ import (
 type Runtime struct {
 	Logger          *zap.Logger
 	Router          http.Handler
+	MetricsHandler  http.Handler
 	GRPCServer      *grpcpkg.Server
 	RPCServer       *stdrpc.Server
 	Pool            *pgxpool.Pool
@@ -56,6 +57,12 @@ type usecaseSet struct {
 func Bootstrap(ctx context.Context, cfg config.Config) (*Runtime, error) {
 	appLogger, err := logger.New(cfg.LogLevel)
 	if err != nil {
+		return nil, err
+	}
+
+	metricsStack, err := observability.NewPrometheusStack()
+	if err != nil {
+		_ = appLogger.Sync()
 		return nil, err
 	}
 
@@ -91,7 +98,7 @@ func Bootstrap(ctx context.Context, cfg config.Config) (*Runtime, error) {
 	}
 
 	store := platformpostgres.NewStore(db, appLogger)
-	telemetry := observability.NewTelemetry()
+	telemetry := metricsStack.Telemetry
 	clock := systemClock{}
 	providers := newProviders(cfg, appLogger)
 	usecases := newUsecases(cfg, store, providers, telemetry, clock)
@@ -108,18 +115,21 @@ func Bootstrap(ctx context.Context, cfg config.Config) (*Runtime, error) {
 		TransferWebhookVerifier: providers.TransferWebhookVerifier,
 		ReadyChecker:            pool,
 		CORSAllowedOrigins:      cfg.CORSAllowedOrigins,
+		Telemetry:               telemetry,
 	})
 	grpcServer := grpcadapter.NewServer(grpcadapter.ServerDeps{
 		GetReferenceRates: usecases.GetReferenceRates,
 		CreateQuote:       usecases.CreateQuote,
 		AcceptQuote:       usecases.AcceptQuote,
 		GetConversion:     usecases.GetConversion,
+		Telemetry:         telemetry,
 	})
 	rpcServer, err := rpcadapter.NewServer(rpcadapter.ServerDeps{
 		GetReferenceRates: usecases.GetReferenceRates,
 		CreateQuote:       usecases.CreateQuote,
 		AcceptQuote:       usecases.AcceptQuote,
 		GetConversion:     usecases.GetConversion,
+		Telemetry:         telemetry,
 	})
 	if err != nil {
 		_ = sqlDB.Close()
@@ -131,6 +141,7 @@ func Bootstrap(ctx context.Context, cfg config.Config) (*Runtime, error) {
 	return &Runtime{
 		Logger:          appLogger,
 		Router:          router,
+		MetricsHandler:  metricsStack.Handler,
 		GRPCServer:      grpcServer,
 		RPCServer:       rpcServer,
 		Pool:            pool,

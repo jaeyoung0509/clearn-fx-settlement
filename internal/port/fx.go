@@ -55,6 +55,7 @@ type Clock interface {
 
 type Telemetry interface {
 	StartSpan(ctx context.Context, name string) (context.Context, func(err error))
+	RecordInboundRequest(ctx context.Context, transport string, operation string, outcome string, duration time.Duration)
 	RecordWebhookDuplicate(ctx context.Context, provider string)
 	RecordWebhookAccepted(ctx context.Context, provider string)
 	RecordOutboxPublished(ctx context.Context, eventType string)

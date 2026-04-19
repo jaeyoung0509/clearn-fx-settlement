@@ -10,6 +10,7 @@ import (
 	"fx-settlement-lab/go-backend/internal/domain/conversion"
 	"fx-settlement-lab/go-backend/internal/domain/quote"
 	"fx-settlement-lab/go-backend/internal/domain/shared"
+	"fx-settlement-lab/go-backend/internal/port"
 	"fx-settlement-lab/go-backend/internal/usecase"
 )
 
@@ -20,6 +21,7 @@ type ServerDeps struct {
 	CreateQuote       *usecase.CreateQuoteUsecase
 	AcceptQuote       *usecase.AcceptQuoteUsecase
 	GetConversion     *usecase.GetConversionUsecase
+	Telemetry         port.Telemetry
 }
 
 type Server struct {
@@ -27,6 +29,7 @@ type Server struct {
 	createQuote       *usecase.CreateQuoteUsecase
 	acceptQuote       *usecase.AcceptQuoteUsecase
 	getConversion     *usecase.GetConversionUsecase
+	telemetry         port.Telemetry
 }
 
 type MoneyInput struct {
@@ -119,6 +122,7 @@ func NewServer(deps ServerDeps) (*rpc.Server, error) {
 		createQuote:       deps.CreateQuote,
 		acceptQuote:       deps.AcceptQuote,
 		getConversion:     deps.GetConversion,
+		telemetry:         deps.Telemetry,
 	})
 	if err != nil {
 		return nil, err
@@ -127,7 +131,10 @@ func NewServer(deps ServerDeps) (*rpc.Server, error) {
 	return server, nil
 }
 
-func (s *Server) GetRates(args GetRatesArgs, reply *GetRatesReply) error {
+func (s *Server) GetRates(args GetRatesArgs, reply *GetRatesReply) (err error) {
+	started := time.Now()
+	defer s.recordRequest("FXRPCService.GetRates", started, err)
+
 	baseCurrency, err := shared.ParseCurrency(args.Base)
 	if err != nil {
 		return err
@@ -155,7 +162,10 @@ func (s *Server) GetRates(args GetRatesArgs, reply *GetRatesReply) error {
 	return nil
 }
 
-func (s *Server) CreateQuote(args CreateQuoteArgs, reply *QuoteReply) error {
+func (s *Server) CreateQuote(args CreateQuoteArgs, reply *QuoteReply) (err error) {
+	started := time.Now()
+	defer s.recordRequest("FXRPCService.CreateQuote", started, err)
+
 	idempotencyKey, err := shared.ParseIdempotencyKey(args.IdempotencyKey)
 	if err != nil {
 		return err
@@ -183,7 +193,10 @@ func (s *Server) CreateQuote(args CreateQuoteArgs, reply *QuoteReply) error {
 	return nil
 }
 
-func (s *Server) CreateConversion(args CreateConversionArgs, reply *ConversionReply) error {
+func (s *Server) CreateConversion(args CreateConversionArgs, reply *ConversionReply) (err error) {
+	started := time.Now()
+	defer s.recordRequest("FXRPCService.CreateConversion", started, err)
+
 	idempotencyKey, err := shared.ParseIdempotencyKey(args.IdempotencyKey)
 	if err != nil {
 		return err
@@ -210,7 +223,10 @@ func (s *Server) CreateConversion(args CreateConversionArgs, reply *ConversionRe
 	return nil
 }
 
-func (s *Server) GetConversion(args GetConversionArgs, reply *ConversionReply) error {
+func (s *Server) GetConversion(args GetConversionArgs, reply *ConversionReply) (err error) {
+	started := time.Now()
+	defer s.recordRequest("FXRPCService.GetConversion", started, err)
+
 	if err := validateULID("conversionId", args.ConversionID); err != nil {
 		return err
 	}
@@ -252,6 +268,28 @@ func validateULID(field string, raw string) error {
 	}
 
 	return nil
+}
+
+func (s *Server) recordRequest(operation string, started time.Time, err error) {
+	if s.telemetry == nil {
+		return
+	}
+
+	s.telemetry.RecordInboundRequest(nilContext(), "rpc", operation, classifyRPCOutcome(err), time.Since(started))
+}
+
+func classifyRPCOutcome(err error) string {
+	if err == nil {
+		return "success"
+	}
+
+	appErr := domain.AsAppError(err)
+	switch appErr.Code {
+	case domain.ErrorCodeValidation, domain.ErrorCodeNotFound, domain.ErrorCodeConflict, domain.ErrorCodeUnauthorized:
+		return "client_error"
+	default:
+		return "server_error"
+	}
 }
 
 func toMoneyReply(value shared.Money) Money {
